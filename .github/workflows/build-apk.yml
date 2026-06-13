@@ -9,13 +9,13 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 40
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Find Flutter ZIP and extract
+      - name: Find and extract Flutter ZIP
         shell: bash
         run: |
           set -e
@@ -53,15 +53,13 @@ jobs:
           SRC_DIR="$(dirname "$PUBSPEC_FILE")"
 
           APP_NAME="$(grep '^name:' "$PUBSPEC_FILE" | head -n 1 | awk '{print $2}' | tr -cd 'a-zA-Z0-9_')"
+
           if [ -z "$APP_NAME" ]; then
             APP_NAME="post_management_sms"
           fi
 
           echo "SRC_DIR=$SRC_DIR" >> "$GITHUB_ENV"
           echo "APP_NAME=$APP_NAME" >> "$GITHUB_ENV"
-
-          echo "Source project: $SRC_DIR"
-          echo "App name: $APP_NAME"
 
       - name: Setup Java
         uses: actions/setup-java@v4
@@ -75,7 +73,7 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Create clean Flutter Android project
+      - name: Create clean Android Flutter project
         shell: bash
         run: |
           set -e
@@ -102,13 +100,9 @@ jobs:
             cp -R "$SRC_DIR/icons" clean_app/icons
           fi
 
-          if [ -f "$SRC_DIR/README_FA.txt" ]; then
-            cp "$SRC_DIR/README_FA.txt" clean_app/README_FA.txt
-          fi
-
           echo "PROJECT_DIR=clean_app" >> "$GITHUB_ENV"
 
-      - name: Patch Android permissions
+      - name: Patch Android Manifest
         shell: bash
         run: |
           set -e
@@ -117,33 +111,32 @@ jobs:
 
           MANIFEST="android/app/src/main/AndroidManifest.xml"
 
-          python3 - <<'PY'
-          from pathlib import Path
+          python3 -c '
+from pathlib import Path
 
-          manifest = Path("android/app/src/main/AndroidManifest.xml")
-          text = manifest.read_text()
+manifest = Path("android/app/src/main/AndroidManifest.xml")
+text = manifest.read_text()
 
-          if 'android.permission.INTERNET' not in text:
-              text = text.replace(
-                  '<manifest xmlns:android="http://schemas.android.com/apk/res/android">',
-                  '<manifest xmlns:android="http://schemas.android.com/apk/res/android">\n    <uses-permission android:name="android.permission.INTERNET" />'
-              )
+if "android.permission.INTERNET" not in text:
+    text = text.replace(
+        "<manifest xmlns:android=\"http://schemas.android.com/apk/res/android\">",
+        "<manifest xmlns:android=\"http://schemas.android.com/apk/res/android\">\n    <uses-permission android:name=\"android.permission.INTERNET\" />"
+    )
 
-          if 'android.permission.ACCESS_NETWORK_STATE' not in text:
-              text = text.replace(
-                  '<uses-permission android:name="android.permission.INTERNET" />',
-                  '<uses-permission android:name="android.permission.INTERNET" />\n    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />'
-              )
+if "android.permission.ACCESS_NETWORK_STATE" not in text:
+    text = text.replace(
+        "<uses-permission android:name=\"android.permission.INTERNET\" />",
+        "<uses-permission android:name=\"android.permission.INTERNET\" />\n    <uses-permission android:name=\"android.permission.ACCESS_NETWORK_STATE\" />"
+    )
 
-          if 'usesCleartextTraffic' not in text:
-              text = text.replace(
-                  '<application',
-                  '<application android:usesCleartextTraffic="true"',
-                  1
-              )
+if "usesCleartextTraffic" not in text:
+    text = text.replace(
+        "<application",
+        "<application android:usesCleartextTraffic=\"true\"",
+        1
+    )
 
-          queries = '''
-    <queries>
+queries = """    <queries>
         <intent>
             <action android:name="android.intent.action.VIEW" />
             <data android:scheme="sms" />
@@ -161,16 +154,13 @@ jobs:
             <data android:scheme="smsto" />
         </intent>
     </queries>
-'''
+"""
 
-          if '<queries>' not in text:
-              text = text.replace('<application', queries + '\n    <application', 1)
+if "<queries>" not in text:
+    text = text.replace("<application", queries + "\n    <application", 1)
 
-          manifest.write_text(text)
-          PY
-
-          echo "AndroidManifest patched:"
-          cat "$MANIFEST"
+manifest.write_text(text)
+'
 
       - name: Flutter Pub Get
         shell: bash
