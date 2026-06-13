@@ -2,7 +2,6 @@ name: Build Flutter APK
 
 on:
   workflow_dispatch:
-
   push:
     branches:
       - main
@@ -10,55 +9,95 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 35
 
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Find ZIP
+      - name: Find and extract ZIP
+        shell: bash
         run: |
-          ZIP_FILE=$(find . -maxdepth 1 -name "*.zip" | head -n 1)
-
+          set -e
+          ZIP_FILE="$(find . -maxdepth 1 -type f -iname '*.zip' | sort | tail -n 1)"
           if [ -z "$ZIP_FILE" ]; then
-            echo "No ZIP found"
+            echo "No ZIP file found"
             exit 1
           fi
 
-          mkdir project
-          unzip -q "$ZIP_FILE" -d project
+          echo "ZIP_FILE=$ZIP_FILE"
+          rm -rf extracted clean_app
+          mkdir extracted
+          unzip -q "$ZIP_FILE" -d extracted
 
-          PUBSPEC=$(find project -name pubspec.yaml | head -n 1)
-
-          if [ -z "$PUBSPEC" ]; then
+          PUBSPEC_FILE="$(find extracted -type f -name pubspec.yaml | head -n 1)"
+          if [ -z "$PUBSPEC_FILE" ]; then
             echo "pubspec.yaml not found"
+            find extracted -maxdepth 5 -type f
             exit 1
           fi
 
-          echo "PROJECT_DIR=$(dirname "$PUBSPEC")" >> $GITHUB_ENV
+          SRC_DIR="$(dirname "$PUBSPEC_FILE")"
+          echo "SRC_DIR=$SRC_DIR" >> "$GITHUB_ENV"
+          echo "SOURCE PROJECT: $SRC_DIR"
 
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: 17
+          java-version: "17"
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
           channel: stable
+          cache: true
+
+      - name: Create clean Flutter project
+        shell: bash
+        run: |
+          set -e
+          flutter --version
+          flutter config --no-analytics
+
+          flutter create clean_app --platforms=android --org com.kadkhodae
+
+          rm -rf clean_app/lib
+          cp -R "$SRC_DIR/lib" clean_app/lib
+
+          cp "$SRC_DIR/pubspec.yaml" clean_app/pubspec.yaml
+
+          if [ -f "$SRC_DIR/analysis_options.yaml" ]; then
+            cp "$SRC_DIR/analysis_options.yaml" clean_app/analysis_options.yaml
+          fi
+
+          if [ -d "$SRC_DIR/assets" ]; then
+            cp -R "$SRC_DIR/assets" clean_app/assets
+          fi
+
+          if [ -d "$SRC_DIR/icons" ]; then
+            cp -R "$SRC_DIR/icons" clean_app/icons
+          fi
+
+          echo "PROJECT_DIR=clean_app" >> "$GITHUB_ENV"
 
       - name: Flutter Pub Get
+        shell: bash
         run: |
+          set -e
           cd "$PROJECT_DIR"
           flutter pub get
 
       - name: Build APK
+        shell: bash
         run: |
+          set -e
           cd "$PROJECT_DIR"
           flutter build apk --release
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: release-apk
+          name: post-management-apk
           path: ${{ env.PROJECT_DIR }}/build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
