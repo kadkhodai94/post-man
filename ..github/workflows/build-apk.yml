@@ -168,4 +168,4 @@ KEYSTORE_B64
           name: post-management-signed-apk
           path: ${{ env.PROJECT_DIR }}/build/app/outputs/flutter-apk/app-release-v*.apk
           if-no-files-found: error
-. 
+# trigger build 
