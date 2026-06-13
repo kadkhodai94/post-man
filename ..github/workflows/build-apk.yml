@@ -1,64 +1,11 @@
-name: Build Flutter APK
+name: Test Workflow
 
 on:
   workflow_dispatch:
 
-  push:
-    branches:
-      - main
-
 jobs:
-  build:
+  test:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Find ZIP
-        run: |
-          ZIP_FILE=$(find . -maxdepth 1 -name "*.zip" | head -n 1)
-
-          if [ -z "$ZIP_FILE" ]; then
-            echo "No ZIP found"
-            exit 1
-          fi
-
-          mkdir project
-          unzip -q "$ZIP_FILE" -d project
-
-          PUBSPEC=$(find project -name pubspec.yaml | head -n 1)
-
-          if [ -z "$PUBSPEC" ]; then
-            echo "pubspec.yaml not found"
-            exit 1
-          fi
-
-          echo "PROJECT_DIR=$(dirname "$PUBSPEC")" >> $GITHUB_ENV
-
-      - name: Setup Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: 17
-
-      - name: Setup Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          channel: stable
-
-      - name: Flutter Pub Get
-        run: |
-          cd "$PROJECT_DIR"
-          flutter pub get
-
-      - name: Build APK
-        run: |
-          cd "$PROJECT_DIR"
-          flutter build apk --release
-
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: release-apk
-          path: ${{ env.PROJECT_DIR }}/build/app/outputs/flutter-apk/app-release.apk
+      - run: echo "Hello World"
